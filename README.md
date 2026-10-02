@@ -26,3 +26,4 @@ npm run report -- --from 2026-10-01 --out laporan.docx --include-merges
 
 - `src/core/` — logika utama (dipakai ulang oleh web UI nanti): `generateReport(range, config) → Buffer`
 - `src/cli/` — entry point tipis
+- `result_report` — file generate report disimpan disini

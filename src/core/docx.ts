@@ -28,14 +28,15 @@ const text = (
   o: { bold?: boolean; italics?: boolean; color?: string; size?: number } = {},
 ) => new TextRun({ text: t, font: FONT, size: o.size ?? 22, ...o });
 
-function fieldRow(label: string, value: string) {
-  const cell = (w: number, t: string) =>
+function fieldRow(label: string, value: string | string[]) {
+  const cell = (w: number, t: string | string[]) =>
     new TableCell({
       width: { size: w, type: WidthType.DXA },
       borders: TableBorders.NONE as never,
-      children: [
-        new Paragraph({ spacing: { after: 80 }, children: [text(t)] }),
-      ],
+      children: (Array.isArray(t) ? t : [t]).map(
+        (line) =>
+          new Paragraph({ spacing: { after: 80 }, children: [text(line)] }),
+      ),
     });
   return new TableRow({
     children: [cell(2200, label), cell(300, ":"), cell(7206, value)],
@@ -67,7 +68,12 @@ async function imageBlock(buf: Buffer, label?: string): Promise<Paragraph[]> {
   return out;
 }
 
-async function buildForm(c: ReportCommit, meta: FormMeta, first: boolean) {
+async function buildForm(
+  dateKey: string,
+  list: ReportCommit[],
+  meta: FormMeta,
+  first: boolean,
+) {
   const out: (Paragraph | Table)[] = [];
 
   out.push(
@@ -86,8 +92,14 @@ async function buildForm(c: ReportCommit, meta: FormMeta, first: boolean) {
       borders: TableBorders.NONE,
       rows: [
         fieldRow("Nama", meta.employeeName),
-        fieldRow("Tanggal", formatFormDate(c.dateKey)),
-        fieldRow("Alasan Lembur", c.title),
+        fieldRow("Tanggal", formatFormDate(dateKey)),
+        // 1 commit: judul saja. Lebih dari 1: daftar bernomor.
+        fieldRow(
+          "Alasan Lembur",
+          list.length === 1
+            ? list[0].title
+            : list.map((c, i) => `${i + 1}. ${c.title}`),
+        ),
       ],
     }),
   );
@@ -98,20 +110,32 @@ async function buildForm(c: ReportCommit, meta: FormMeta, first: boolean) {
       children: [text("Screenshot perubahan", { bold: true })],
     }),
   );
-  if (c.note)
-    out.push(
-      new Paragraph({
-        children: [text(c.note, { italics: true, color: "B45309" })],
-      }),
-    );
-  const total = c.images.length;
-  for (let i = 0; i < total; i++) {
-    out.push(
-      ...(await imageBlock(
-        c.images[i],
-        total > 1 ? `Bagian ${i + 1}/${total}` : undefined,
-      )),
-    );
+  for (let n = 0; n < list.length; n++) {
+    const c = list[n];
+    if (list.length > 1) {
+      out.push(
+        new Paragraph({
+          keepNext: true,
+          spacing: { before: 160, after: 80 },
+          children: [text(`${n + 1}. ${c.title}`, { bold: true, size: 20 })],
+        }),
+      );
+    }
+    if (c.note)
+      out.push(
+        new Paragraph({
+          children: [text(c.note, { italics: true, color: "B45309" })],
+        }),
+      );
+    const total = c.images.length;
+    for (let i = 0; i < total; i++) {
+      out.push(
+        ...(await imageBlock(
+          c.images[i],
+          total > 1 ? `Bagian ${i + 1}/${total}` : undefined,
+        )),
+      );
+    }
   }
 
   // Blok tanda tangan atasan (dijaga agar tidak terpisah dari baris berikutnya)
@@ -133,7 +157,7 @@ async function buildForm(c: ReportCommit, meta: FormMeta, first: boolean) {
     sig(meta.supervisor.name, { bold: true }),
     new Paragraph({
       keepLines: true,
-      children: [text(`NIP ${meta.supervisor.nik}`)],
+      children: [text(`NIK ${meta.supervisor.nik}`)],
     }),
   );
   return out;
@@ -151,8 +175,18 @@ export async function buildDocx(
       new Paragraph({ children: [text("Tidak ada commit pada periode ini.")] }),
     );
   }
-  for (let i = 0; i < sorted.length; i++) {
-    children.push(...(await buildForm(sorted[i], meta, i === 0)));
+  // Satu form per tanggal; semua commit (lintas project) di tanggal itu digabung.
+  const byDate = new Map<string, ReportCommit[]>();
+  for (const c of sorted) {
+    if (!byDate.has(c.dateKey)) byDate.set(c.dateKey, []);
+    byDate.get(c.dateKey)!.push(c);
+  }
+  let first = true;
+  for (const dateKey of [...byDate.keys()].sort()) {
+    children.push(
+      ...(await buildForm(dateKey, byDate.get(dateKey)!, meta, first)),
+    );
+    first = false;
   }
 
   const doc = new Document({
