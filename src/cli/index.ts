@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { Command } from "commander";
 import { generateReport, loadConfig } from "../core/index";
+import path from "node:path";
 
 const program = new Command();
 program
@@ -25,7 +26,8 @@ try {
   const buf = await generateReport(range, config, console.log);
   const out =
     opts.out ?? `${range.from}_${range.to}_Muhammad_Zulfadly_Simatupang.docx`;
-  await writeFile(out, buf);
+  const folderOutput = path.join("result_report", out);
+  await writeFile(folderOutput, buf);
   console.log(`\nSelesai: ${out}`);
 } catch (e) {
   console.error(`\nError: ${(e as Error).message}`);
