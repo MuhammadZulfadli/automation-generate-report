@@ -1,0 +1,18 @@
+gitlab:
+  url: https://gitlab.perusahaan.co.id
+  author_email: kamu@perusahaan.co.id
+# Opsional. Jika dikosongkan, nama diambil dari akun GitLab (token).
+employee:
+  name: Muhammad Zulfadly Simatupang, S.Kom
+supervisor:
+  name: Nama Atasan
+  nik: "123456"
+options:
+  include_merges: false
+  max_slice_height: 1800
+projects:
+  - id: 123
+    name: Web Dashboard
+    exclude: ["package-lock.json", "yarn.lock", "dist/**"]
+  - id: 456
+    name: Mobile Landing
